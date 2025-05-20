@@ -14,3 +14,7 @@ def tru(a, b):
 
 def chia(a, b):
     return a/b
+
+
+def a(a, b):
+    return a/b
