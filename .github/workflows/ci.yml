@@ -35,8 +35,8 @@ jobs:
           coverage report
 
   deploy_job:
-    runs-on: ubuntu-latest
-    needs: build # Chạy sau khi job 'build' thành công
+    runs-on: self-hosted
+    needs: build 
     if: github.ref == 'refs/heads/main' # Chỉ deploy khi trên nhánh main
     environment: production
 
