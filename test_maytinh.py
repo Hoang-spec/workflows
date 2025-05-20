@@ -1,4 +1,4 @@
-from maytinh import add, subtract, tru
+from maytinh import add, subtract
 
 
 def test_add():
