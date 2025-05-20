@@ -1,4 +1,4 @@
-from maytinh import add, subtract
+from maytinh import add, subtract, tru
 
 
 def test_add():
@@ -7,3 +7,7 @@ def test_add():
 
 def test_subtract():
     assert subtract(5, 3) == 2
+
+
+
+
