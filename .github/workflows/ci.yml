@@ -1,4 +1,4 @@
-name: Python CI
+name: Advanced Python CI/CD
 
 on:
   push:
@@ -9,43 +9,100 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install black flake8 mypy bandit pytest-cov
+
+      - name: Check code formatting with Black
+        run: black . --check
 
       - name: Lint with flake8
-        run: flake8 .
+        run: flake8 . --max-line-length=100
+
+      - name: Type check with mypy
+        run: mypy .
+
+      - name: Security check with Bandit
+        run: bandit -r . -f json -o bandit-results.json
 
       - name: Run tests with pytest
-        run: pytest
+        run: pytest --cov=./ --cov-report=xml
 
-      - name: Generate coverage report
-        run: |
-          coverage run -m pytest
-          coverage report
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: true
+
+      - name: Upload security scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: bandit-results.json
 
   deploy_job:
     runs-on: self-hosted
-    needs: build 
-    if: github.ref == 'refs/heads/main' # Chỉ deploy khi trên nhánh main
-    environment: production
+    needs: build
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      success()
+    environment:
+      name: production
+      url: https://your-app-domain.com
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
       - name: Deploy to server
         run: |
-          echo "Deploying to server..."
-          scp -r . user@192.168.1.100:/var/www/myapp
-          ssh user@192.168.1.100 "cd /var/www/myapp && ./restart.sh"
+          echo "Deploying to production server..."
+          rsync -avz --delete \
+            --exclude '.git*' \
+            --exclude 'tests' \
+            --exclude '*.pyc' \
+            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/var/www/myapp/
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd /var/www/myapp && ./restart.sh"
+
+      - name: Notify deployment status
+        if: always()
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_CHANNEL: deployments
+          SLACK_COLOR: ${{ job.status }}
+          SLACK_TITLE: Deployment Status
+          SLACK_MESSAGE: "Deployment to production ${{ job.status }}"
