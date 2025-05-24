@@ -1,4 +1,4 @@
-name: Advanced Python CI/CD
+name: Advanced Python CI
 
 on:
   push:
@@ -62,47 +62,12 @@ jobs:
         with:
           sarif_file: bandit-results.json
 
-  deploy_job:
-    runs-on: self-hosted
-    needs: build
-    if: |
-      github.ref == 'refs/heads/main' &&
-      github.event_name == 'push' &&
-      success()
-    environment:
-      name: production
-      url: https://your-app-domain.com
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.7.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add host key
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Deploy to server
-        run: |
-          echo "Deploying to production server..."
-          rsync -avz --delete \
-            --exclude '.git*' \
-            --exclude 'tests' \
-            --exclude '*.pyc' \
-            ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/var/www/myapp/
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "cd /var/www/myapp && ./restart.sh"
-
-      - name: Notify deployment status
+      - name: Notify CI status
         if: always()
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_CHANNEL: deployments
+          SLACK_CHANNEL: ci-notifications
           SLACK_COLOR: ${{ job.status }}
-          SLACK_TITLE: Deployment Status
-          SLACK_MESSAGE: "Deployment to production ${{ job.status }}"
+          SLACK_TITLE: CI Status
+          SLACK_MESSAGE: "CI Pipeline ${{ job.status }} for ${{ github.event.repository.name }}"
